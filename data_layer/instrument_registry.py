@@ -17,6 +17,10 @@ class InstrumentRegistry:
             "ICICI_NASDAQ_100": Instrument("ICICI_NASDAQ_100", "ICICI Prudential Nasdaq 100 Index Fund - Direct", "149219", "mutual_fund"),
             "AXIS_CHINA": Instrument("AXIS_CHINA", "Axis Greater China Equity FoF - Direct", "148699", "mutual_fund"),
             "EDELWEISS_EUROPE": Instrument("EDELWEISS_EUROPE", "Edelweiss Europe Dynamic Equity Offshore Fund - Direct", "140296", "mutual_fund"),
+            "MOTILAL_MIDCAP": Instrument("MOTILAL_MIDCAP", "Motilal Oswal Midcap Fund-Direct", "127042", "mutual_fund"),
+            "QUANT_SMALL": Instrument("QUANT_SMALL", "Quant small cap direct growth", "120827", "mutual_fund"),
+            "SBI_BANKING": Instrument("SBI_BANKING", "SBI BANKING & FINANCIAL SERVICES FUND - DIRECT", "133859", "mutual_fund"),
+
             
             # The 20 Unique Index Funds
             "INDEX_NIFTY_50": Instrument("INDEX_NIFTY_50", "ICICI Prudential Nifty 50 Index Fund Direct Growth", "120620", "index_fund"),
