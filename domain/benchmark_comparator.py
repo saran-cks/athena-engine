@@ -1,4 +1,4 @@
-from typing import List, Tuple, Optional
+from typing import List, Tuple
 from datetime import date
 from domain.entities import CashFlow, Instrument, ComparisonResult, Transaction
 from domain.investment_simulator import InvestmentSimulator
@@ -6,7 +6,6 @@ from domain.metrics_engine import MetricsEngine
 
 
 class BenchmarkComparator:
-
     def __init__(self, simulator: InvestmentSimulator):
         self.simulator = simulator
 
@@ -83,10 +82,10 @@ class BenchmarkComparator:
             actual_max_dd=actual_max_dd,
             benchmark_max_dd=benchmark_dd,
             actual_1y_rolling=act_roll,
-            benchmark_1y_rolling=ben_roll,          # may be None
-            rolling_alpha=roll_alpha,               # may be None
-            upside_capture=up_cap,                  # may be None
-            downside_capture=down_cap,              # may be None
+            benchmark_1y_rolling=ben_roll,  # may be None
+            rolling_alpha=roll_alpha,  # may be None
+            upside_capture=up_cap,  # may be None
+            downside_capture=down_cap,  # may be None
             actual_contributions=actual_contributions,
             actual_timeline=actual_timeline,
             benchmark_timeline=sim_result.portfolio_value_timeline,

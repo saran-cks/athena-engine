@@ -3,7 +3,6 @@ import os
 import pickle
 import sys
 from collections import defaultdict
-from copy import deepcopy
 from datetime import date
 
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
@@ -77,7 +76,9 @@ def compute_portfolio_unit_nav(portfolio, registry, nav_service, simulator):
                 sim_result.cashflows,
             )
         )
-    return MetricsEngine.aggregate_portfolio_unit_nav(fund_values, fund_units), valuation_date
+    return MetricsEngine.aggregate_portfolio_unit_nav(
+        fund_values, fund_units
+    ), valuation_date
 
 
 def pct(value):
@@ -86,14 +87,34 @@ def pct(value):
     return f"{value * 100:.2f}%"
 
 
-def scenario_1_same_day_boundary(ports, registry, nav_service, simulator, compare_use_case):
+def scenario_1_same_day_boundary(
+    ports, registry, nav_service, simulator, compare_use_case
+):
     months = [
-        date(2024, 4, 5), date(2024, 5, 6), date(2024, 6, 6), date(2024, 7, 8),
-        date(2024, 8, 6), date(2024, 9, 6), date(2024, 10, 7), date(2024, 11, 6),
-        date(2024, 12, 6), date(2025, 1, 6), date(2025, 2, 6), date(2025, 3, 6),
-        date(2025, 4, 7), date(2025, 5, 6), date(2025, 6, 6), date(2025, 7, 7),
-        date(2025, 8, 6), date(2025, 9, 8), date(2025, 10, 6), date(2025, 11, 6),
-        date(2025, 12, 8), date(2026, 1, 6), date(2026, 2, 6), date(2026, 3, 6),
+        date(2024, 4, 5),
+        date(2024, 5, 6),
+        date(2024, 6, 6),
+        date(2024, 7, 8),
+        date(2024, 8, 6),
+        date(2024, 9, 6),
+        date(2024, 10, 7),
+        date(2024, 11, 6),
+        date(2024, 12, 6),
+        date(2025, 1, 6),
+        date(2025, 2, 6),
+        date(2025, 3, 6),
+        date(2025, 4, 7),
+        date(2025, 5, 6),
+        date(2025, 6, 6),
+        date(2025, 7, 7),
+        date(2025, 8, 6),
+        date(2025, 9, 8),
+        date(2025, 10, 6),
+        date(2025, 11, 6),
+        date(2025, 12, 8),
+        date(2026, 1, 6),
+        date(2026, 2, 6),
+        date(2026, 3, 6),
         date(2026, 4, 6),
     ]
     txs = [
@@ -128,7 +149,9 @@ def scenario_1_same_day_boundary(ports, registry, nav_service, simulator, compar
 
 
 def build_mixed_old_new_portfolio(portfolio):
-    tx_dates = sorted({tx.date for tx in portfolio.transactions if tx.instrument_id == "HDFC_DEFENCE"})
+    tx_dates = sorted(
+        {tx.date for tx in portfolio.transactions if tx.instrument_id == "HDFC_DEFENCE"}
+    )
     txs = []
     for idx, tx_date in enumerate(tx_dates, start=1):
         txs.append(Transaction(tx_date, 3000.0, "PPFAS_FLEXI", "stress_old_new"))
@@ -136,10 +159,14 @@ def build_mixed_old_new_portfolio(portfolio):
     return Portfolio("stress_old_new", "stress", txs)
 
 
-def scenario_2_old_new_mix(ports, registry, nav_service, simulator, compare_use_case, multi_use_case):
+def scenario_2_old_new_mix(
+    ports, registry, nav_service, simulator, compare_use_case, multi_use_case
+):
     base = ports["pf_prime"]
     mixed = build_mixed_old_new_portfolio(base)
-    unit_nav, valuation_date = compute_portfolio_unit_nav(mixed, registry, nav_service, simulator)
+    unit_nav, valuation_date = compute_portfolio_unit_nav(
+        mixed, registry, nav_service, simulator
+    )
     quality = registry.get("INDEX_QUALITY")
     quality_inception = nav_service.get_first_nav(quality.scheme_code)[0]
 
@@ -151,8 +178,7 @@ def scenario_2_old_new_mix(ports, registry, nav_service, simulator, compare_use_
             returns.append((dt, val / prev_val - 1.0))
 
     window = [
-        (dt, ret) for dt, ret in returns
-        if abs((dt - quality_inception).days) <= 10
+        (dt, ret) for dt, ret in returns if abs((dt - quality_inception).days) <= 10
     ]
     max_abs_window = max((abs(ret) for _, ret in window), default=0.0)
 
@@ -160,7 +186,11 @@ def scenario_2_old_new_mix(ports, registry, nav_service, simulator, compare_use_
     single = compare_use_case.execute(mixed, benchmark)
     multi_results = multi_use_case.execute(mixed, registry.get_benchmarks())
 
-    verdict = max_abs_window < 0.15 and len(multi_results) > 0 and not multi_use_case.last_errors
+    verdict = (
+        max_abs_window < 0.15
+        and len(multi_results) > 0
+        and not multi_use_case.last_errors
+    )
 
     return {
         "portfolio": mixed.portfolio_id,
@@ -185,14 +215,16 @@ def scenario_3_outperforming_benchmarks(ports, registry, compare_use_case):
     for inst_id in targets:
         bench = registry.get(inst_id)
         result = compare_use_case.execute(portfolio, bench)
-        rows.append({
-            "benchmark": bench.name,
-            "alpha": result.alpha,
-            "bench_xirr": result.benchmark_xirr,
-            "rolling_alpha": result.rolling_alpha,
-            "upside_capture": result.upside_capture,
-            "downside_capture": result.downside_capture,
-        })
+        rows.append(
+            {
+                "benchmark": bench.name,
+                "alpha": result.alpha,
+                "bench_xirr": result.benchmark_xirr,
+                "rolling_alpha": result.rolling_alpha,
+                "upside_capture": result.upside_capture,
+                "downside_capture": result.downside_capture,
+            }
+        )
     return rows
 
 
@@ -212,7 +244,9 @@ def print_scenario_2(out):
     print(f"Portfolio: {out['portfolio']}")
     print(f"Valuation date: {out['valuation_date']}")
     print(f"New fund inception: {out['quality_inception']}")
-    print(f"Max abs unit-NAV return within +/-10 days of inception: {pct(out['max_abs_window_return'])}")
+    print(
+        f"Max abs unit-NAV return within +/-10 days of inception: {pct(out['max_abs_window_return'])}"
+    )
     print("Returns around inception:")
     for dt, ret in out["window_returns"]:
         print(f"  {dt}: {pct(ret)}")
@@ -245,10 +279,16 @@ def main():
     parser.parse_args()
 
     ports = load_cached_portfolios()
-    registry, nav_service, simulator, compare_use_case, multi_use_case = build_services()
+    registry, nav_service, simulator, compare_use_case, multi_use_case = (
+        build_services()
+    )
 
-    out1 = scenario_1_same_day_boundary(ports, registry, nav_service, simulator, compare_use_case)
-    out2 = scenario_2_old_new_mix(ports, registry, nav_service, simulator, compare_use_case, multi_use_case)
+    out1 = scenario_1_same_day_boundary(
+        ports, registry, nav_service, simulator, compare_use_case
+    )
+    out2 = scenario_2_old_new_mix(
+        ports, registry, nav_service, simulator, compare_use_case, multi_use_case
+    )
     out3 = scenario_3_outperforming_benchmarks(ports, registry, compare_use_case)
 
     print_scenario_1(out1)

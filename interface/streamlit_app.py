@@ -1,9 +1,9 @@
 import streamlit as st
 import pandas as pd
-from datetime import date
 import sys
 import os
 from urllib.parse import quote
+import pickle
 
 # Add root project directory to path to allow importing layers
 sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -17,13 +17,12 @@ from data_layer.instrument_registry import InstrumentRegistry
 from domain.nav_service import NavService
 from domain.investment_simulator import InvestmentSimulator
 from domain.portfolio_aggregator import PortfolioAggregator
-from domain.metrics_engine import MetricsEngine
 from domain.benchmark_comparator import BenchmarkComparator
 from application.compare_portfolio_to_benchmark import ComparePortfolioToBenchmark
 from application.compare_fund_to_fund import CompareFundToFund
 from application.compare_multiple_portfolios import CompareMultiplePortfolios
 from application.multi_benchmark_analysis import MultiBenchmarkAnalysis
-from domain.entities import Portfolio, Transaction
+from domain.entities import Portfolio
 
 st.set_page_config(page_title="Athena - MF Engine", layout="wide")
 
@@ -275,6 +274,7 @@ def render_shell(title: str, subtitle: str):
 
 inject_theme()
 
+
 def get_services():
     client = AmfiClient()
     repo = NavRepository("db/nav_cache.db")
@@ -285,23 +285,25 @@ def get_services():
     sim = InvestmentSimulator(nav_s)
     agg = PortfolioAggregator()
     comp = BenchmarkComparator(sim)
-    
+
     uc_p2b = ComparePortfolioToBenchmark(registry, sim, agg, comp)
     uc_f2f = CompareFundToFund(sim)
     uc_mp = CompareMultiplePortfolios(uc_p2b)
     uc_mb = MultiBenchmarkAnalysis(uc_p2b)
-    
+
     return client, repo, tx_repo, registry, uc_p2b, uc_f2f, uc_mp, uc_mb
+
 
 client, repo, tx_repo, registry, uc_p2b, uc_f2f, uc_mp, uc_mb = get_services()
 
-import pickle
 
 PORT_CACHE_PATH = "db/portfolio_cache.pkl"
+
 
 def save_portfolios():
     with open(PORT_CACHE_PATH, "wb") as f:
         pickle.dump(st.session_state.portfolios, f)
+
 
 if "portfolios" not in st.session_state:
     if os.path.exists(PORT_CACHE_PATH):
@@ -313,24 +315,29 @@ if "portfolios" not in st.session_state:
     else:
         st.session_state.portfolios = {}
 
+
 def format_perc(val):
     if val is None:
         return "N/A"
-    return f"{val*100:.2f}%"
+    return f"{val * 100:.2f}%"
+
 
 def format_curr(val):
     if val is None:
         return "N/A"
-    return f"₹{val:,.0f}"
+    return f"Rs. {val:,.0f}"
+
 
 def format_capture(val):
     if val is None:
         return "N/A"
     if val < 0:
-        return f"{val:.2f}x ⚡"
+        return f"{val:.2f}x (neg)"
     return f"{val:.2f}x"
 
+
 # --- PAGES --- #
+
 
 def page_data_setup():
     render_shell(
@@ -338,7 +345,7 @@ def page_data_setup():
         "Wire up instruments, sync NAV history, and stage portfolios for disciplined benchmark analysis.",
     )
     st.title("Data Setup")
-    
+
     col1, col2 = st.columns(2)
     with col1:
         st.subheader("Sync NAV Data")
@@ -346,58 +353,83 @@ def page_data_setup():
             with st.spinner("Downloading NAVAll.txt..."):
                 df = client.fetch_daily_all()
                 if df is not None:
-                    records = [(r['scheme_code'], r['date'], r['nav']) for _, r in df.iterrows()]
+                    records = [
+                        (r["scheme_code"], r["date"], r["nav"])
+                        for _, r in df.iterrows()
+                    ]
                     repo.upsert_bulk(records)
                     st.success(f"Synced {len(records)} records for today.")
                 else:
                     st.error("Failed to sync.")
-                    
+
     with col2:
         st.subheader("Database Setup")
         st.markdown("**Sync Full History for ALL Funds (Required for Simulation)**")
-        st.info("Fetches all multi-year history for all registered funds natively via MFAPI exactly once.")
+        st.info(
+            "Fetches all multi-year history for all registered funds natively via MFAPI exactly once."
+        )
         if st.button("Sync All Funds Data"):
-            with st.spinner("Downloading histories... this may take a bit for a large list"):
+            with st.spinner(
+                "Downloading histories... this may take a bit for a large list"
+            ):
+                unresolved = registry.resolve_missing_scheme_codes(client)
+                synced_count = 0
                 for inst_id, inst in registry._instruments.items():
+                    if not inst.scheme_code:
+                        continue
                     hist = client.fetch_history(inst.scheme_code)
                     if hist:
                         repo.insert_mfapi_history(inst.scheme_code, hist)
-            st.success("All funds perfectly synchronized!")
-            
+                        synced_count += 1
+            if unresolved:
+                st.warning(
+                    "Could not resolve AMFI scheme codes for: " + ", ".join(unresolved)
+                )
+            st.success(f"Synchronized history for {synced_count} instruments.")
+
     st.divider()
-    
+
     st.subheader("Upload Portfolios")
-    st.info("💡 To combine multiple funds into a single Portfolio, simply upload them one-by-one using the EXACT SAME Portfolio Name!")
-    
+    st.info(
+        "To combine multiple funds into a single Portfolio, upload them one-by-one using the exact same Portfolio Name."
+    )
+
     colA, colB = st.columns(2)
     with colA:
         port_id = st.text_input("Portfolio Name (e.g. My_SIPs)", value="Default_Port")
         bench_names = {b.name: b for b in registry.get_all()}
         fund_name = st.selectbox("Map file to Instrument:", list(bench_names.keys()))
     with colB:
-        files = st.file_uploader("Upload CSV/XLSX (date, amount)", accept_multiple_files=True)
+        files = st.file_uploader(
+            "Upload CSV/XLSX (date, amount)", accept_multiple_files=True
+        )
         if st.button("Load Transaction Files"):
             inst = bench_names[fund_name]
             for file in files:
                 try:
-                    txs = tx_repo.load_from_file(file, file.name, inst.instrument_id, port_id)
+                    txs = tx_repo.load_from_file(
+                        file, file.name, inst.instrument_id, port_id
+                    )
                     if port_id not in st.session_state.portfolios:
-                        st.session_state.portfolios[port_id] = Portfolio(portfolio_id=port_id, owner="User", transactions=[])
+                        st.session_state.portfolios[port_id] = Portfolio(
+                            portfolio_id=port_id, owner="User", transactions=[]
+                        )
                     st.session_state.portfolios[port_id].transactions.extend(txs)
                     save_portfolios()
                     st.success(f"Loaded {len(txs)} txs from {file.name}")
                 except Exception as e:
                     st.error(f"Error parsing file: {e}")
-                    
+
         st.divider()
         st.write("Current Portfolios in memory:")
         for k, v in list(st.session_state.portfolios.items()):
             rcol1, rcol2 = st.columns([3, 1])
             rcol1.write(f"- **{k}**: {len(v.transactions)} total transactions")
-            if rcol2.button("🗑️ Delete", key=f"del_{k}"):
+            if rcol2.button("Delete", key=f"del_{k}"):
                 del st.session_state.portfolios[k]
                 save_portfolios()
                 st.rerun()
+
 
 def page_single_analysis(hide_title=False):
     if not hide_title:
@@ -406,49 +438,68 @@ def page_single_analysis(hide_title=False):
             "Pressure-test a live portfolio against a chosen benchmark using money-weighted returns, path diagnostics, and simulation overlays.",
         )
         st.title("Single Portfolio vs Benchmark")
-        
+
     if not st.session_state.portfolios:
         st.warning("Upload a portfolio first.")
         return
-        
+
     p_name = st.selectbox("Select Portfolio", list(st.session_state.portfolios.keys()))
     benchmaps = {b.name: b for b in registry.get_benchmarks()}
     b_name = st.selectbox("Select Benchmark", list(benchmaps.keys()))
-    
+
     if st.button("Analyze"):
         try:
             port = st.session_state.portfolios[p_name]
             bench = benchmaps[b_name]
             res = uc_p2b.execute(port, bench)
-            
+
             # Metrics
             st.subheader("Metrics vs Benchmark")
             kpi1, kpi2, kpi3, kpi4, kpi5 = st.columns(5)
             kpi1.metric("Actual XIRR", format_perc(res.actual_xirr))
-            kpi2.metric(f"Bench XIRR", format_perc(res.benchmark_xirr))
-            kpi3.metric("Alpha", format_perc(res.alpha), delta_color="normal" if res.alpha > 0 else "inverse")
+            kpi2.metric("Bench XIRR", format_perc(res.benchmark_xirr))
+            kpi3.metric(
+                "Alpha",
+                format_perc(res.alpha),
+                delta_color="normal" if res.alpha > 0 else "inverse",
+            )
             kpi4.metric("Actual Value", format_curr(res.actual_value))
             kpi5.metric("Total Invested", format_curr(res.total_invested))
-            
+
             st.divider()
             colA, colB = st.columns(2)
             with colA:
-                st.subheader("📈 Advanced Actual Metrics")
+                st.subheader("Advanced Actual Metrics")
                 st.metric("Annualized Return (TWRR)", format_perc(res.actual_cagr))
                 st.metric("1Y Rolling Avg", format_perc(res.actual_1y_rolling))
                 st.metric("Absolute Return", format_perc(res.actual_abs_return))
-                st.metric("Max Drawdown", format_perc(res.actual_max_dd), delta_color="inverse")
+                st.metric(
+                    "Max Drawdown",
+                    format_perc(res.actual_max_dd),
+                    delta_color="inverse",
+                )
             with colB:
-                st.subheader("🤖 Simulated Benchmark Metrics")
+                st.subheader("Simulated Benchmark Metrics")
                 st.metric("Annualized Return (TWRR)", format_perc(res.benchmark_cagr))
                 st.metric("1Y Rolling Avg", format_perc(res.benchmark_1y_rolling))
-                
-                est_income = (res.benchmark_value - res.total_invested) if (res.benchmark_value is not None and res.total_invested is not None) else None
+
+                est_income = (
+                    (res.benchmark_value - res.total_invested)
+                    if (
+                        res.benchmark_value is not None
+                        and res.total_invested is not None
+                    )
+                    else None
+                )
                 st.metric("Est. Bench Income", format_curr(est_income))
-                
+
                 st.metric("Absolute Return", format_perc(res.benchmark_abs_return))
-                st.metric("Max Drawdown", format_perc(res.benchmark_max_dd), delta_color="inverse")
-                
+                st.metric(
+                    "Max Drawdown",
+                    format_perc(res.benchmark_max_dd),
+                    delta_color="inverse",
+                )
+
             st.divider()
             colX, colY, colZ = st.columns(3)
             with colX:
@@ -456,39 +507,56 @@ def page_single_analysis(hide_title=False):
             with colY:
                 st.metric("Upside Capture Ratio", format_capture(res.upside_capture))
             with colZ:
-                st.metric("Downside Capture Ratio", format_capture(res.downside_capture), delta_color="inverse")
-                
+                st.metric(
+                    "Downside Capture Ratio",
+                    format_capture(res.downside_capture),
+                    delta_color="inverse",
+                )
+
             if len(res.actual_contributions) > 1:
                 st.divider()
                 st.subheader("Portfolio Asset Contribution Breakdown")
-                pie_df = pd.DataFrame(list(res.actual_contributions.items()), columns=["Fund", "Current Value"])
+                pie_df = pd.DataFrame(
+                    list(res.actual_contributions.items()),
+                    columns=["Fund", "Current Value"],
+                )
                 import altair as alt
-                fig = alt.Chart(pie_df).mark_arc(innerRadius=50).encode(
-                    theta="Current Value",
-                    color="Fund",
-                    tooltip=["Fund", "Current Value"]
+
+                fig = (
+                    alt.Chart(pie_df)
+                    .mark_arc(innerRadius=50)
+                    .encode(
+                        theta="Current Value",
+                        color="Fund",
+                        tooltip=["Fund", "Current Value"],
+                    )
                 )
                 st.altair_chart(fig)
-            
+
             st.divider()
             st.subheader("Portfolio Value Growth Over Time")
-            
+
             # Build DataFrame for charting
             if res.actual_timeline and res.benchmark_timeline:
                 # Merge timelines by date
-                df_act = pd.DataFrame(res.actual_timeline, columns=["Date", "Actual Portfolio"])
-                df_bench = pd.DataFrame(res.benchmark_timeline, columns=["Date", "Benchmark Simulation"])
+                df_act = pd.DataFrame(
+                    res.actual_timeline, columns=["Date", "Actual Portfolio"]
+                )
+                df_bench = pd.DataFrame(
+                    res.benchmark_timeline, columns=["Date", "Benchmark Simulation"]
+                )
                 df_act.set_index("Date", inplace=True)
                 df_bench.set_index("Date", inplace=True)
-                
+
                 # Outer join to ensure dates line up, ffill missing
                 df_plot = df_act.join(df_bench, how="outer").ffill().fillna(0.0)
                 st.line_chart(df_plot, color=["#1f77b4", "#2ca02c"])
             else:
                 st.info("Chart plotting requires historical simulation data.")
-                
+
         except Exception as e:
             st.error(f"Execution failed: {e}. Check if data/history is fully synced.")
+
 
 def page_portfolio_analysis():
     render_shell(
@@ -496,8 +564,11 @@ def page_portfolio_analysis():
         "Study a multi-asset portfolio as one coordinated system with flow-aware analytics and benchmark context.",
     )
     st.title("Portfolio Analysis")
-    st.info("Since portfolios natively accept multiple funds in our architecture, this executes just like Single Analysis but aggregates underlying assets seamlessly.")
+    st.info(
+        "Since portfolios natively accept multiple funds in our architecture, this executes just like Single Analysis but aggregates underlying assets seamlessly."
+    )
     page_single_analysis(hide_title=True)
+
 
 def page_multi_benchmark():
     render_shell(
@@ -508,10 +579,12 @@ def page_multi_benchmark():
     if not st.session_state.portfolios:
         st.warning("Upload a portfolio first.")
         return
-        
-    p_name = st.selectbox("Select Portfolio to Benchmark", list(st.session_state.portfolios.keys()))
+
+    p_name = st.selectbox(
+        "Select Portfolio to Benchmark", list(st.session_state.portfolios.keys())
+    )
     benchmarks = registry.get_benchmarks()
-    
+
     if st.button("Run Multi-Analysis"):
         port = st.session_state.portfolios[p_name]
         try:
@@ -525,82 +598,257 @@ def page_multi_benchmark():
                 else:
                     st.error("No benchmark analyses could be completed.")
                 return
-            
+
             # Build a comparative table
             table_data = []
             for r in results:
-                b_income = (r.benchmark_value - r.total_invested) if (r.benchmark_value is not None and r.total_invested is not None) else None
-                table_data.append({
-                    "Benchmark": r.benchmark.name,
-                    "Alpha": format_perc(r.alpha),
-                    "Bench XIRR": format_perc(r.benchmark_xirr),
-                    "Rolling Alpha": format_perc(r.rolling_alpha),
-                    "Up Cap": format_capture(r.upside_capture),
-                    "Down Cap": format_capture(r.downside_capture),
-                    "Est. Bench Income": format_curr(b_income),
-                    "Bench Final Value": format_curr(r.benchmark_value),
-                    "Bench Max DD": format_perc(r.benchmark_max_dd)
-                })
-            
+                b_income = (
+                    (r.benchmark_value - r.total_invested)
+                    if (r.benchmark_value is not None and r.total_invested is not None)
+                    else None
+                )
+                table_data.append(
+                    {
+                        "Benchmark": r.benchmark.name,
+                        "Alpha": format_perc(r.alpha),
+                        "Bench XIRR": format_perc(r.benchmark_xirr),
+                        "Rolling Alpha": format_perc(r.rolling_alpha),
+                        "Up Cap": format_capture(r.upside_capture),
+                        "Down Cap": format_capture(r.downside_capture),
+                        "Est. Bench Income": format_curr(b_income),
+                        "Bench Final Value": format_curr(r.benchmark_value),
+                        "Bench Max DD": format_perc(r.benchmark_max_dd),
+                    }
+                )
+
             # actual is identical across all results
             actual_xirr = results[0].actual_xirr
             actual_val = results[0].actual_value
-            
-            st.subheader(f"Baseline Portfolio -> XIRR: {format_perc(actual_xirr)} | Value: {format_curr(actual_val)}")
+
+            st.subheader(
+                f"Baseline Portfolio -> XIRR: {format_perc(actual_xirr)} | Value: {format_curr(actual_val)}"
+            )
             st.dataframe(pd.DataFrame(table_data))
 
             if skipped:
                 details = "\n".join([f"- {name}: {msg}" for name, msg in skipped])
-                st.warning(f"Skipped {len(skipped)} benchmark(s) due to missing or stale NAV history:\n{details}")
-            
+                st.warning(
+                    f"Skipped {len(skipped)} benchmark(s) due to missing or stale NAV history:\n{details}"
+                )
+
             st.divider()
             colA, colB = st.columns(2)
             with colA:
                 st.subheader("Asset Contribution")
                 if len(results[0].actual_contributions) > 1:
                     import altair as alt
-                    pie_df = pd.DataFrame(list(results[0].actual_contributions.items()), columns=["Fund", "Current Value"])
-                    fig = alt.Chart(pie_df).mark_arc(innerRadius=40).encode(
-                        theta="Current Value",
-                        color="Fund",
-                        tooltip=["Fund", "Current Value"]
+
+                    pie_df = pd.DataFrame(
+                        list(results[0].actual_contributions.items()),
+                        columns=["Fund", "Current Value"],
+                    )
+                    fig = (
+                        alt.Chart(pie_df)
+                        .mark_arc(innerRadius=40)
+                        .encode(
+                            theta="Current Value",
+                            color="Fund",
+                            tooltip=["Fund", "Current Value"],
+                        )
                     )
                     st.altair_chart(fig, width="stretch")
                 else:
                     st.info("Single asset portfolio.")
             with colB:
                 st.subheader("Metrics vs Benchmarks")
-                st.metric("Portfolio 1Y Rolling Avg", format_perc(results[0].actual_1y_rolling))
-                st.metric("Portfolio Max Drawdown", format_perc(results[0].actual_max_dd))
-            
+                st.metric(
+                    "Portfolio 1Y Rolling Avg",
+                    format_perc(results[0].actual_1y_rolling),
+                )
+                st.metric(
+                    "Portfolio Max Drawdown", format_perc(results[0].actual_max_dd)
+                )
+
             st.divider()
             st.subheader("Comparative Overlay Chart")
-            
-            df_plot = pd.DataFrame(results[0].actual_timeline, columns=["Date", "Actual Portfolio"])
+
+            df_plot = pd.DataFrame(
+                results[0].actual_timeline, columns=["Date", "Actual Portfolio"]
+            )
             df_plot.set_index("Date", inplace=True)
-            
+
             for r in results:
-                df_b = pd.DataFrame(r.benchmark_timeline, columns=["Date", r.benchmark.name])
+                df_b = pd.DataFrame(
+                    r.benchmark_timeline, columns=["Date", r.benchmark.name]
+                )
                 df_b.set_index("Date", inplace=True)
                 df_plot = df_plot.join(df_b, how="outer")
-            
+
             df_plot = df_plot.ffill().fillna(0.0)
-            
+
             # Browser Crash Protection: 21 lines * 5000 daily points = locked SVG. Down-sample to Weekly!
             df_plot.index = pd.to_datetime(df_plot.index)
-            df_plot = df_plot.resample('W-FRI').last().ffill()
-            
+            df_plot = df_plot.resample("W-FRI").last().ffill()
+
             # Since line chart colors require passing a list of exact length, we dynamically create it.
             # Actual portfolio is blue, others are varying colors.
             if len(results) <= 6:
-                color_list = ["#1f77b4"] + ["#2ca02c", "#ff7f0e", "#d62728", "#9467bd", "#8c564b", "#e377c2"][:len(results)]
+                color_list = ["#1f77b4"] + [
+                    "#2ca02c",
+                    "#ff7f0e",
+                    "#d62728",
+                    "#9467bd",
+                    "#8c564b",
+                    "#e377c2",
+                ][: len(results)]
                 st.line_chart(df_plot, color=color_list)
             else:
                 st.line_chart(df_plot)
-            
+
         except Exception as e:
             st.error(f"Execution failed: {e}")
-    
+
+
+def page_multi_active_funds():
+    render_shell(
+        "Council of Argonauts",
+        "Run the same portfolio through a curated active-fund field to judge manager skill, category fit, and capital allocation discipline.",
+    )
+    st.title("Multi Active Funds Analysis")
+    if not st.session_state.portfolios:
+        st.warning("Upload a portfolio first.")
+        return
+
+    p_name = st.selectbox(
+        "Select Portfolio to Compare", list(st.session_state.portfolios.keys())
+    )
+    active_funds = registry.get_active_funds_for_analysis()
+
+    if st.button("Run Multi-Active Analysis"):
+        unresolved = registry.resolve_missing_scheme_codes(client, active_funds)
+        if unresolved:
+            st.error(
+                "Could not resolve AMFI scheme codes for: " + ", ".join(unresolved)
+            )
+            return
+
+        port = st.session_state.portfolios[p_name]
+        try:
+            results = uc_mb.execute(port, active_funds)
+            skipped = getattr(uc_mb, "last_errors", [])
+
+            if not results:
+                if skipped:
+                    details = "\n".join([f"- {name}: {msg}" for name, msg in skipped])
+                    st.error(f"No active fund analyses could be completed.\n{details}")
+                else:
+                    st.error("No active fund analyses could be completed.")
+                return
+
+            table_data = []
+            for r in results:
+                b_income = (
+                    (r.benchmark_value - r.total_invested)
+                    if (r.benchmark_value is not None and r.total_invested is not None)
+                    else None
+                )
+                table_data.append(
+                    {
+                        "Fund": r.benchmark.name,
+                        "Alpha": format_perc(r.alpha),
+                        "Fund XIRR": format_perc(r.benchmark_xirr),
+                        "Rolling Alpha": format_perc(r.rolling_alpha),
+                        "Up Cap": format_capture(r.upside_capture),
+                        "Down Cap": format_capture(r.downside_capture),
+                        "Est. Fund Income": format_curr(b_income),
+                        "Fund Final Value": format_curr(r.benchmark_value),
+                        "Fund Max DD": format_perc(r.benchmark_max_dd),
+                    }
+                )
+
+            actual_xirr = results[0].actual_xirr
+            actual_val = results[0].actual_value
+
+            st.subheader(
+                f"Baseline Portfolio -> XIRR: {format_perc(actual_xirr)} | Value: {format_curr(actual_val)}"
+            )
+            st.dataframe(pd.DataFrame(table_data))
+
+            if skipped:
+                details = "\n".join([f"- {name}: {msg}" for name, msg in skipped])
+                st.warning(
+                    f"Skipped {len(skipped)} active fund(s) due to missing or stale NAV history:\n{details}"
+                )
+
+            st.divider()
+            colA, colB = st.columns(2)
+            with colA:
+                st.subheader("Asset Contribution")
+                if len(results[0].actual_contributions) > 1:
+                    import altair as alt
+
+                    pie_df = pd.DataFrame(
+                        list(results[0].actual_contributions.items()),
+                        columns=["Fund", "Current Value"],
+                    )
+                    fig = (
+                        alt.Chart(pie_df)
+                        .mark_arc(innerRadius=40)
+                        .encode(
+                            theta="Current Value",
+                            color="Fund",
+                            tooltip=["Fund", "Current Value"],
+                        )
+                    )
+                    st.altair_chart(fig, width="stretch")
+                else:
+                    st.info("Single asset portfolio.")
+            with colB:
+                st.subheader("Metrics vs Active Funds")
+                st.metric(
+                    "Portfolio 1Y Rolling Avg",
+                    format_perc(results[0].actual_1y_rolling),
+                )
+                st.metric(
+                    "Portfolio Max Drawdown", format_perc(results[0].actual_max_dd)
+                )
+
+            st.divider()
+            st.subheader("Comparative Overlay Chart")
+
+            df_plot = pd.DataFrame(
+                results[0].actual_timeline, columns=["Date", "Actual Portfolio"]
+            )
+            df_plot.set_index("Date", inplace=True)
+
+            for r in results:
+                df_b = pd.DataFrame(
+                    r.benchmark_timeline, columns=["Date", r.benchmark.name]
+                )
+                df_b.set_index("Date", inplace=True)
+                df_plot = df_plot.join(df_b, how="outer")
+
+            df_plot = df_plot.ffill().fillna(0.0)
+            df_plot.index = pd.to_datetime(df_plot.index)
+            df_plot = df_plot.resample("W-FRI").last().ffill()
+
+            if len(results) <= 6:
+                color_list = ["#1f77b4"] + [
+                    "#2ca02c",
+                    "#ff7f0e",
+                    "#d62728",
+                    "#9467bd",
+                    "#8c564b",
+                    "#e377c2",
+                ][: len(results)]
+                st.line_chart(df_plot, color=color_list)
+            else:
+                st.line_chart(df_plot)
+
+        except Exception as e:
+            st.error(f"Execution failed: {e}")
+
+
 def page_portfolio_vs_portfolio():
     render_shell(
         "Heracles Duel Room",
@@ -610,64 +858,72 @@ def page_portfolio_vs_portfolio():
     if len(st.session_state.portfolios) < 2:
         st.warning("Upload at least two portfolios to compare.")
         return
-        
+
     col1, col2 = st.columns(2)
     with col1:
-        p1_name = st.selectbox("Select Portfolio A", list(st.session_state.portfolios.keys()))
+        p1_name = st.selectbox(
+            "Select Portfolio A", list(st.session_state.portfolios.keys())
+        )
     with col2:
         other_ports = [k for k in st.session_state.portfolios.keys() if k != p1_name]
-        p2_name = st.selectbox("Select Portfolio B", other_ports if other_ports else ["None"])
-        
+        p2_name = st.selectbox(
+            "Select Portfolio B", other_ports if other_ports else ["None"]
+        )
+
     benchmaps = {b.name: b for b in registry.get_benchmarks()}
     b_name = st.selectbox("Select Common Baseline Benchmark", list(benchmaps.keys()))
-    
+
     if st.button("Battle Portfolios"):
         if p2_name == "None":
             st.error("Need a valid Portfolio B")
             return
-            
+
         try:
             p1 = st.session_state.portfolios[p1_name]
             p2 = st.session_state.portfolios[p2_name]
             bench = benchmaps[b_name]
-            
+
             res1 = uc_p2b.execute(p1, bench)
             res2 = uc_p2b.execute(p2, bench)
-            
+
             colA, colB = st.columns(2)
             with colA:
-                st.subheader(f"🛡️ {p1_name}")
+                st.subheader(f"Portfolio A: {p1_name}")
                 st.metric("Actual XIRR", format_perc(res1.actual_xirr))
                 st.metric("Alpha vs Bench", format_perc(res1.alpha))
                 st.metric("Final Value", format_curr(res1.actual_value))
                 st.metric("Max Drawdown", format_perc(res1.actual_max_dd))
             with colB:
-                st.subheader(f"⚔️ {p2_name}")
+                st.subheader(f"Portfolio B: {p2_name}")
                 st.metric("Actual XIRR", format_perc(res2.actual_xirr))
                 st.metric("Alpha vs Bench", format_perc(res2.alpha))
                 st.metric("Final Value", format_curr(res2.actual_value))
                 st.metric("Max Drawdown", format_perc(res2.actual_max_dd))
-                
+
             st.divider()
             st.subheader("Performance Race")
-            
+
             df_1 = pd.DataFrame(res1.actual_timeline, columns=["Date", p1_name])
             df_2 = pd.DataFrame(res2.actual_timeline, columns=["Date", p2_name])
             df_1.set_index("Date", inplace=True)
             df_2.set_index("Date", inplace=True)
-            
+
             df_plot = df_1.join(df_2, how="outer").ffill().fillna(0.0)
-            st.line_chart(df_plot, color=["#1f77b4", "#d62728"]) # Blue and Red
-            
+            st.line_chart(df_plot, color=["#1f77b4", "#d62728"])  # Blue and Red
+
         except Exception as e:
             st.error(f"Execution failed: {e}")
 
-pg = st.navigation([
-    st.Page(page_data_setup, title="1. Setup & Data", icon="🛠️"),
-    st.Page(page_single_analysis, title="2. Single Analysis", icon="📈"),
-    st.Page(page_portfolio_analysis, title="3. Portfolio Analysis", icon="📊"),
-    st.Page(page_multi_benchmark, title="4. Multi-Benchmark", icon="🔀"),
-    st.Page(page_portfolio_vs_portfolio, title="5. Port vs Port", icon="⚔️")
-])
+
+pg = st.navigation(
+    [
+        st.Page(page_data_setup, title="1. Setup & Data"),
+        st.Page(page_single_analysis, title="2. Single Analysis"),
+        st.Page(page_portfolio_analysis, title="3. Portfolio Analysis"),
+        st.Page(page_multi_benchmark, title="4. Multi-Benchmark"),
+        st.Page(page_portfolio_vs_portfolio, title="5. Port vs Port"),
+        st.Page(page_multi_active_funds, title="6. Multi Active Funds"),
+    ]
+)
 
 pg.run()

@@ -1,4 +1,5 @@
-from typing import List, Optional
+import re
+from typing import Dict, List, Optional
 from domain.entities import Instrument
 
 class InstrumentRegistry:
@@ -44,6 +45,128 @@ class InstrumentRegistry:
             "INDEX_SENSEX": Instrument("INDEX_SENSEX", "ICICI Prudential BSE Sensex Index Fund Direct Growth", "141841", "index_fund"),
             "INDEX_EQUAL_WEIGHT": Instrument("INDEX_EQUAL_WEIGHT", "ICICI Prudential Nifty50 Equal Weight Index Fund Direct Growth", "150639", "index_fund"),
         }
+        self._active_analysis_specs: Dict[str, Dict[str, str]] = {
+            "ACTIVE_PPFAS_FLEXI": {
+                "name": "Parag Parikh Flexi Cap Fund",
+                "lookup_name": "Parag Parikh Flexi Cap Fund - Direct Growth",
+                "scheme_code": "122639",
+            },
+            "ACTIVE_HDFC_FLEXI": {
+                "name": "HDFC Flexi Cap Fund",
+                "lookup_name": "HDFC Flexi Cap Fund - Growth Option - Direct Plan",
+                "scheme_code": "118955",
+            },
+            "ACTIVE_ICICI_FLEXICAP": {
+                "name": "ICICI Prudential Flexicap Fund",
+                "lookup_name": "ICICI Prudential Flexicap Fund - Direct Plan - Growth",
+                "scheme_code": "148990",
+            },
+            "ACTIVE_HDFC_MIDCAP": {
+                "name": "HDFC Mid-Cap Opportunities Fund",
+                "lookup_name": "HDFC Mid-Cap Opportunities Fund - Growth Option - Direct Plan",
+                "scheme_code": "118989",
+            },
+            "ACTIVE_NIPPON_GROWTH": {
+                "name": "Nippon India Growth Mid Cap Fund",
+                "lookup_name": "Nippon India Growth Mid Cap Fund - Direct Plan Growth Plan - Growth Option",
+                "scheme_code": "118668",
+            },
+            "ACTIVE_MOTILAL_MIDCAP": {
+                "name": "Motilal oswal midcap fund direct",
+                "lookup_name": "Motilal Oswal Midcap Fund - Direct Plan - Growth Option",
+                "scheme_code": "127042",
+            },
+            "ACTIVE_ICICI_LARGEMID": {
+                "name": "ICICI Prudential Large & Mid Cap Fund",
+                "lookup_name": "ICICI Prudential Large & Mid Cap Fund - Direct Plan - Growth",
+                "scheme_code": "120596",
+            },
+            "ACTIVE_MOTILAL_LARGEMID": {
+                "name": "Motilal Oswal Large & Midcap Fund",
+                "lookup_name": "Motilal Oswal Large and Midcap Fund - Direct Plan - Growth Option",
+                "scheme_code": "147704",
+            },
+            "ACTIVE_QUANT_FLEXI": {
+                "name": "Quant Flexi Cap Fund",
+                "lookup_name": "Quant Flexi Cap Fund - Direct Plan - Growth Option",
+                "scheme_code": "120843",
+            },
+            "ACTIVE_SBI_CONTRA": {
+                "name": "SBI Contra Fund",
+                "lookup_name": "SBI Contra Fund - Direct Plan - Growth",
+                "scheme_code": "119835",
+            },
+            "ACTIVE_EDELWEISS_EMERGING": {
+                "name": "Edelweiss Emerging Markets Opportunities Equity Offshore Fund Direct Growth",
+                "lookup_name": "Edelweiss Emerging Markets Opportunities Equity Offshore Fund - Direct Plan - Growth Option",
+                "scheme_code": "140327",
+            },
+            "ACTIVE_FRANKLIN_CORP_DEBT": {
+                "name": "Franklin India Corporate Debt Fund Direct Growth",
+                "lookup_name": "Franklin India Corporate Debt Fund - Direct - Growth",
+                "scheme_code": "118569",
+            },
+            "ACTIVE_NIPPON_TAIWAN": {
+                "name": "Nippon India Taiwan Equity Fund Direct Growth",
+                "lookup_name": "Nippon India Taiwan Equity Fund - Direct Plan - Growth Option",
+                "scheme_code": "149329",
+            },
+            "ACTIVE_EDELWEISS_AGGR_HYBRID": {
+                "name": "Edelweiss Aggressive Hybrid Fund Direct Growth",
+                "lookup_name": "Edelweiss Aggressive Hybrid Fund - Direct Plan - Growth Option",
+                "scheme_code": "118624",
+            },
+            "ACTIVE_ABSL_CREDIT_RISK": {
+                "name": "Aditya Birla Sun Life Credit Risk Fund Direct Growth",
+                "lookup_name": "Aditya Birla Sun Life Credit Risk Fund - Growth - Direct Plan",
+                "scheme_code": "134387",
+            },
+            "ACTIVE_AXIS_GLOBAL_ALPHA": {
+                "name": "Axis Global Equity Alpha FoF Direct Growth",
+                "lookup_name": "Axis Global Equity Alpha Fund of Fund - Direct Plan - Growth",
+                "scheme_code": "134387",
+            },
+            "ACTIVE_SBI_BANKING": {
+                "name": "SBI Banking & Financial Services Fund Direct Growth",
+                "lookup_name": "SBI BANKING & FINANCIAL SERVICES FUND - DIRECT",
+                "scheme_code": "133859",
+            },
+            "ACTIVE_ICICI_PHD": {
+                "name": "ICICI Prudential Pharma Healthcare and Diagnostics (P.H.D) Fund Direct Growth",
+                "lookup_name": "ICICI Prudential Pharma Healthcare and Diagnostics (P.H.D) Fund - Direct Plan - Growth",
+                "scheme_code": "143874",
+            },
+            "ACTIVE_BANDHAN_SMALLCAP": {
+                "name": "Bandhan small cap fund",
+                "lookup_name": "Bandhan Small Cap Fund - Direct Plan - Growth",
+                "scheme_code": "147946",
+            },
+             "ACTIVE_HSBC_NIFTY": {
+                "name": "HSBC Nifty 50 Index Fund Direct Growth",
+                "lookup_name": "HSBC Nifty 50 Index Fund Direct Growth",
+                "scheme_code": "151157",
+            },
+              "ACTIVE_HSBC_NEXT_NIFTY": {
+                "name": "HSBC Next Nifty 50 Index Fund Direct Growth",
+                "lookup_name": "HSBC Next Nifty 50 Index Fund Direct Growth",
+                "scheme_code": "151160",
+            },
+             "ACTIVE_SBI_GOLD": {
+                "name": "SBI GOLD FUND",
+                "lookup_name": "SBI GOLD FUND",
+                "scheme_code": "119788",
+            },
+        }
+        self._active_analysis_ids = list(self._active_analysis_specs.keys())
+        self._amfi_lookup_cache = None
+
+        for instrument_id, spec in self._active_analysis_specs.items():
+            self._instruments[instrument_id] = Instrument(
+                instrument_id,
+                spec["name"],
+                spec["scheme_code"],
+                "mutual_fund",
+            )
         
     def get(self, instrument_id: str) -> Optional[Instrument]:
         return self._instruments.get(instrument_id)
@@ -56,3 +179,88 @@ class InstrumentRegistry:
         
     def get_benchmarks(self) -> List[Instrument]:
         return [inst for inst in self._instruments.values() if inst.instrument_type == "index_fund"]
+
+    def get_active_funds_for_analysis(self) -> List[Instrument]:
+        return [self._instruments[instrument_id] for instrument_id in self._active_analysis_ids]
+
+    def resolve_missing_scheme_codes(self, amfi_client, instruments: Optional[List[Instrument]] = None) -> List[str]:
+        targets = instruments if instruments is not None else list(self._instruments.values())
+        unresolved = []
+
+        scheme_lookup = None
+        for instrument in targets:
+            if instrument.scheme_code:
+                continue
+
+            if scheme_lookup is None:
+                scheme_lookup = self._get_amfi_lookup(amfi_client)
+                if not scheme_lookup:
+                    unresolved.append(instrument.name)
+                    continue
+
+            resolved_code = self._resolve_scheme_code_from_lookup(instrument, scheme_lookup)
+            if resolved_code:
+                instrument.scheme_code = resolved_code
+            else:
+                unresolved.append(instrument.name)
+
+        return unresolved
+
+    def _get_amfi_lookup(self, amfi_client):
+        if self._amfi_lookup_cache is not None:
+            return self._amfi_lookup_cache
+
+        df = amfi_client.fetch_daily_all()
+        if df is None or df.empty:
+            return []
+
+        direct_growth_rows = []
+        for row in df.itertuples(index=False):
+            scheme_name = str(row.scheme_name)
+            compact_name = self._compact_text(scheme_name)
+            direct_growth_rows.append({
+                "scheme_code": str(row.scheme_code),
+                "scheme_name": scheme_name,
+                "compact_name": compact_name,
+                "is_direct_growth": "direct" in compact_name and "growth" in compact_name,
+            })
+
+        self._amfi_lookup_cache = direct_growth_rows
+        return self._amfi_lookup_cache
+
+    def _resolve_scheme_code_from_lookup(self, instrument: Instrument, scheme_lookup) -> Optional[str]:
+        lookup_name = self._active_analysis_specs.get(instrument.instrument_id, {}).get("lookup_name", instrument.name)
+        lookup_compact = self._compact_text(lookup_name)
+        name_compact = self._compact_text(instrument.name)
+
+        direct_growth_candidates = [
+            row for row in scheme_lookup
+            if row["is_direct_growth"] and (lookup_compact in row["compact_name"] or name_compact in row["compact_name"])
+        ]
+        if direct_growth_candidates:
+            return self._pick_best_candidate(lookup_compact, direct_growth_candidates)
+
+        any_candidates = [
+            row for row in scheme_lookup
+            if lookup_compact in row["compact_name"] or name_compact in row["compact_name"]
+        ]
+        if any_candidates:
+            return self._pick_best_candidate(lookup_compact, any_candidates)
+
+        return None
+
+    def _pick_best_candidate(self, lookup_compact: str, candidates) -> str:
+        best_row = max(
+            candidates,
+            key=lambda row: (
+                row["compact_name"] == lookup_compact,
+                lookup_compact in row["compact_name"],
+                row["is_direct_growth"],
+                len(lookup_compact) / max(len(row["compact_name"]), 1),
+            ),
+        )
+        return best_row["scheme_code"]
+
+    @staticmethod
+    def _compact_text(value: str) -> str:
+        return re.sub(r"[^a-z0-9]+", "", value.lower())

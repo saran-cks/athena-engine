@@ -1,0 +1,36 @@
+# Git
+.git
+.gitignore
+
+# Docker
+Dockerfile
+.dockerignore
+
+# Python caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# Virtual environments
+.env
+.venv
+env/
+venv/
+
+# IDEs
+.vscode/
+.idea/
+
+# Local data & databases
+# Exclude the db folder so the container doesn't copy your local SQLite DB and pickle cache
+# You will mount this folder dynamically at runtime instead.
+db/
+data/
+
+# Tests (Optional: omit tests if not running them during the Docker build process)
+tests/
+
+# OS generated files
+.DS_Store
+Thumbs.db

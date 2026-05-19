@@ -24,7 +24,7 @@ INDEX_REGISTRY = {
 "INDEX_NIFTY_50": ("ICICI Prudential Nifty 50 Index Fund Direct Growth", "120620"),
 "INDEX_NIFTY_NEXT_50": ("ICICI Prudential Nifty Next 50 Index Fund Direct Growth", "120684"),
 
-# FIXED
+
 "INDEX_NIFTY_100": ("Axis Nifty 100 Index Fund - Direct Plan ", "147666"),
 
 "INDEX_NIFTY_500": ("ICICI Prudential Nifty 500 Index Fund Direct Growth", "153161"),
@@ -42,12 +42,12 @@ INDEX_REGISTRY = {
 "INDEX_VALUE": ("ICICI Prudential Nifty50 Value 20 Index Fund Direct Growth", "152365"),
 "INDEX_QUALITY": ("ICICI Prudential Nifty200 Quality 30 Index Fund Direct Growth", "153546"),
 
-# FIXED
+
 "INDEX_RAILWAYS": ("Groww Nifty India Railways PSU Index Fund - Direct Plan", "153230"),
 
 "INDEX_NASDAQ_100": ("ICICI Prudential Nasdaq 100 Index Fund Direct Growth", "149219"),
 
-# FIXED
+
 "INDEX_SP_500": ("Motilal Oswal S&P 500 Index Fund Direct Growth", "148381"),
 
 "INDEX_AXIS_SENSEX": ("Axis BSE Sensex Index Fund - Direct Plan", "152422"),
@@ -55,7 +55,7 @@ INDEX_REGISTRY = {
 "INDEX_SENSEX": ("ICICI Prudential BSE Sensex Index Fund Direct Growth", "141841"),
 "INDEX_EQUAL_WEIGHT": ("ICICI Prudential Nifty50 Equal Weight Index Fund Direct Growth", "150639"),
 }
-# STRICT VALIDATION
+
 for key, (name, code) in INDEX_REGISTRY.items():
     keywords = ["index", "nifty"] if "nifty" in name.lower() else ["index"]
 
